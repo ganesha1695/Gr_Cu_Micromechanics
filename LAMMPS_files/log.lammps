@@ -1,0 +1,326 @@
+LAMMPS (29 Oct 2020)
+#Input for Energy Minimization
+
+units		metal
+dimension	3
+boundary	p p p
+atom_style	full
+
+
+#Read in metal Atoms
+read_data	Cu_surf0.data group Cu
+Reading data file ...
+  orthogonal box = (1.0961693e-06 -483.99859 -230.00000) to (83.698999 487.63759 140.00000)
+  1 by 4 by 1 MPI processor grid
+  reading atoms ...
+  1842300 atoms
+  reading velocities ...
+  1842300 velocities
+Finding 1-2 1-3 1-4 neighbors ...
+  special bond factors lj:    0.0      0.0      0.0     
+  special bond factors coul:  0.0      0.0      0.0     
+     0 = max # of 1-2 neighbors
+     0 = max # of 1-3 neighbors
+     0 = max # of 1-4 neighbors
+     1 = max # of special neighbors
+  special bonds CPU = 0.337 seconds
+  read_data CPU = 3.922 seconds
+#Read in Top Atoms
+#read_data	C2_airebo_2str_30bb add append group 2
+#Read in bottom Atoms
+#read_data	c_sqflake_dn0 add append group 3
+#Read in H Top Atoms
+#read_data	hedgestr_suarmAc_30 add append group 4
+#Read in H bottom Atoms
+#read_data	hedgestr_sdarmAc_30 add append group 5
+
+
+
+lattice fcc 3.859
+Lattice spacing in x,y,z = 3.8590000 3.8590000 3.8590000
+
+region left_half   block -30.0 30.0 -200.0 -0.1 -50.0 40 units lattice
+group lfh region left_half
+917635 atoms in group lfh
+displace_atoms lfh move 0.4715065 0.0 -0.4715056 units lattice
+Displacing atoms ...
+
+region interior block -0.1 10.0 -15.0 15.0  -5.97 0 units lattice
+region bottom   block -30.0 30.0 -200.0 200.0 -50.0 -45.86 units lattice
+region upper   block -30.0 30.0 -200.0 200.0 -45.86 40 units lattice
+
+
+
+#displace_atoms 2 move 0.0 0.0 -0.2 units lattice
+#displace_atoms 2 rotate 0 0 0 0 0 1 0 units lattice
+#displace_atoms 2 rotate 0 33.85 0 1 0 0 -3.3 units lattice
+#displace_atoms 2 move 0.0 3.0 -5.8 units lattice
+
+group 1 type 1
+1842300 atoms in group 1
+group 2 type 2
+0 atoms in group 2
+
+region left block -30.0 30.0 119.2 200.0 -50.0 30 units lattice
+region right block -30.0 30.0 -200 -119.2  -50.0 30 units lattice
+group l1 region left
+51815 atoms in group l1
+group r1 region right
+48235 atoms in group r1
+
+group inner region interior
+9009 atoms in group inner
+group bott region bottom
+42964 atoms in group bott
+group top region upper
+1799336 atoms in group top
+
+# ------Force Fields --------
+
+#pair_style eam
+#pair_coeff * * Cu_u3.eam
+
+neighbor		1.0 bin
+neigh_modify delay 10 every 10 check yes page 5000000 one 500000
+
+# ------Force Fields --------
+# Interaction potential for carbon atoms
+######################## Potential defition ########################
+pair_style  hybrid eam/fs airebo 3.0 1 0 lj/cut 18
+####################################################################
+pair_coeff * * eam/fs  Cu1.eam.fs Cu NULL
+pair_coeff * * airebo  CH.airebo   NULL C  # chemical
+Reading airebo potential file CH.airebo with DATE: 2011-10-25
+#pair_coeff 1 3 lj/cut 1.0e-2 3.2 18 # long-range
+pair_coeff 1 2 lj/cut 0.95e-2 3.2 18 # long-range
+####################################################################
+
+#Delete overlapping atoms
+delete_atoms overlap 0.4 all all
+System init for delete_atoms ...
+Neighbor list info ...
+  update every 10 steps, delay 10 steps, check yes
+  max neighbors/atom: 500000, page size: 5000000
+  master list distance cutoff = 19
+  ghost atom cutoff = 19
+  binsize = 9.5, bins = 9 103 39
+  6 neighbor lists, perpetual/occasional/extra = 5 1 0
+  (1) command delete_atoms, occasional, copy from (6)
+      attributes: full, newton on
+      pair build: copy
+      stencil: none
+      bin: none
+  (2) pair eam/fs, perpetual, skip from (5)
+      attributes: half, newton on
+      pair build: skip
+      stencil: none
+      bin: none
+  (3) pair airebo, perpetual, skip from (6)
+      attributes: full, newton on, ghost
+      pair build: skip/ghost
+      stencil: none
+      bin: none
+  (4) pair lj/cut, perpetual, skip from (5)
+      attributes: half, newton on
+      pair build: skip
+      stencil: none
+      bin: none
+  (5) neighbor class addition, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+  (6) neighbor class addition, perpetual
+      attributes: full, newton on, ghost
+      pair build: full/bin/ghost
+      stencil: full/ghost/bin/3d
+      bin: standard
+WARNING: Ignoring 'compress yes' for molecular system (../delete_atoms.cpp:125)
+Deleted 23 atoms, new total = 1842277
+
+fix 1 bott setforce 0. 0. 0.
+fix rfix r1 setforce 0. 0. 0.
+fix lfix l1 setforce 0. 0. 0.
+
+
+# ---------- Simulation Process ---------
+# Initial velocities at a given temperature
+
+# Timestep to make the integration of the motion equation
+timestep		0.002
+
+######################################################################
+#Compute Energy per atom in the interior
+compute atomEnergy all pe/atom
+compute innerEnergy inner reduce sum c_atomEnergy
+compute grenergy all pe/atom
+#compute grenergy_bond 2 pe/atom
+compute custress all stress/atom NULL
+#compute LJ interaction
+compute 1 2 pair lj/cut 2 epair
+compute 2 2 pair airebo
+compute 3 1 pair eam/fs
+compute Tabove top temp/partial 1 1 1
+
+# Parameters to print out on the screen and log.lammps file
+thermo_style	custom step temp c_Tabove etotal pe ke c_1 c_2 c_3 c_innerEnergy vol lx ly lz press pxx pyy pzz cpu
+thermo			100
+thermo_modify lost ignore flush yes
+
+# Saving atomic coordinates
+dump			2 all custom 10000 9singles_d1_*.xyz id type x y z fx fy fz c_atomEnergy c_custress[1] c_custress[2] c_custress[3] c_custress[4] c_custress[5] c_custress[6]
+dump_modify		2 format float %.12f
+#c_grstress[1] c_grstress[2] c_grstress[3] c_grstress[4] c_grstress[5] c_grstress[6]
+#dump_modify		2 element C C
+
+
+# Energy minimization parameters
+min_style		fire
+#minimize		${etol} ${ftol} 100000 10000
+minimize		1.0e-20 1.0e-20 1000000 1000000
+WARNING: Using 'neigh_modify every 1 delay 0 check yes' setting during minimization (../min.cpp:187)
+Neighbor list info ...
+  update every 1 steps, delay 0 steps, check yes
+  max neighbors/atom: 500000, page size: 5000000
+  master list distance cutoff = 19
+  ghost atom cutoff = 19
+  binsize = 9.5, bins = 9 103 39
+  5 neighbor lists, perpetual/occasional/extra = 5 0 0
+  (1) pair eam/fs, perpetual, skip from (4)
+      attributes: half, newton on
+      pair build: skip
+      stencil: none
+      bin: none
+  (2) pair airebo, perpetual, skip from (5)
+      attributes: full, newton on, ghost
+      pair build: skip/ghost
+      stencil: none
+      bin: none
+  (3) pair lj/cut, perpetual, skip from (4)
+      attributes: half, newton on
+      pair build: skip
+      stencil: none
+      bin: none
+  (4) neighbor class addition, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+  (5) neighbor class addition, perpetual
+      attributes: full, newton on, ghost
+      pair build: full/bin/ghost
+      stencil: full/ghost/bin/3d
+      bin: standard
+  Parameters for fire: 
+    dmax delaystep dtgrow dtshrink alpha0 alphashrink tmax tmin    integrator halfstepback 
+     0.1        20    1.1      0.5   0.25        0.99   10 0.02 eulerimplicit          yes 
+Per MPI rank memory allocation (min/avg/max) = 1315.0 | 1315.0 | 1315.0 Mbytes
+Step Temp c_Tabove TotEng PotEng KinEng c_1 c_2 c_3 c_innerEnergy Volume Lx Ly Lz Press Pxx Pyy Pzz CPU 
+       0            0            0   -6037316.4   -6037316.4            0            0            0   -6037316.4   -29577.594     30090240    83.698998    971.63618          370   -706.51608    -906.3779   -905.41904    -307.7513            0 
+     100 1.5185781e-06 1.5548188e-06   -6037316.9   -6037316.9 0.00036162334            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -705.19876   -905.11002   -904.21693   -306.26933    146.55294 
+     200 5.8033825e-07 5.9418799e-07   -6037316.9   -6037316.9 0.00013819761            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -703.47197   -903.57074    -902.6749   -304.17027    288.49041 
+     300 7.082996e-07 7.2520312e-07   -6037316.9   -6037316.9 0.00016866941            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -702.05318   -902.30583   -901.40911   -302.44462    429.79883 
+     400 8.0892586e-07 8.2823082e-07   -6037316.9   -6037316.9 0.00019263183            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -700.55416   -900.96932   -900.07218   -300.62097    571.67184 
+     500 2.7969953e-10 2.8637454e-10   -6037316.9   -6037316.9 6.660565e-08            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370    -699.9777   -900.45536   -899.55813    -299.9196    714.74887 
+     600  1.13214e-09 1.1591585e-09   -6037316.9   -6037316.9 2.6959975e-07            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370    -699.9841   -900.46107   -899.56385   -299.92738    857.09002 
+     700 2.7340091e-09 2.7992561e-09   -6037316.9   -6037316.9 6.5105742e-07            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.98982   -900.46616   -899.56898   -299.93431    998.25611 
+     800    3.252e-09 3.3296087e-09   -6037316.9   -6037316.9 7.7440807e-07            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.99185   -900.46797   -899.57083   -299.93674    1141.0253 
+     900 1.6422965e-12 1.6814898e-12   -6037316.9   -6037316.9 3.9108478e-10            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.98877   -900.46523   -899.56811   -299.93298     1284.183 
+    1000 7.4678828e-12 7.6461033e-12   -6037316.9   -6037316.9 1.7783483e-09            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370    -699.9875   -900.46409   -899.56697   -299.93143    1426.5456 
+    1100 2.326316e-11 2.3818333e-11   -6037316.9   -6037316.9 5.5397228e-09            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370    -699.9848   -900.46169   -899.56456   -299.92815    1569.6473 
+    1200 3.5630317e-11 3.6480632e-11   -6037316.9   -6037316.9 8.4847493e-09            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.98039   -900.45776   -899.56063   -299.92278    1712.7462 
+    1300 2.859955e-11 2.9282076e-11   -6037316.9   -6037316.9 6.8104926e-09            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.97548   -900.45338   -899.55626   -299.91681    1855.2887 
+    1400 4.6529532e-14 4.7639956e-14   -6037316.9   -6037316.9 1.1080211e-11            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.97452   -900.45252   -899.55541   -299.91563    2000.4699 
+    1500 2.2424124e-13 2.2959274e-13   -6037316.9   -6037316.9 5.3399209e-11            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.97467   -900.45265   -899.55554   -299.91581    2142.5073 
+    1600 5.7890634e-13 5.927219e-13   -6037316.9   -6037316.9 1.3785662e-10            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.97494    -900.4529   -899.55578   -299.91614    2285.1455 
+    1700 6.1731274e-13 6.3204487e-13   -6037316.9   -6037316.9 1.4700245e-10            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.97531   -900.45323   -899.55611   -299.91659    2428.3657 
+    1800 5.4480581e-16 5.5780756e-16   -6037316.9   -6037316.9 1.2973617e-13            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.97547   -900.45337   -899.55625   -299.91678    2573.0085 
+    1900 2.8262107e-15 2.8936581e-15   -6037316.9   -6037316.9 6.7301366e-13            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.97546   -900.45336   -899.55625   -299.91677     2714.287 
+    1920 3.7796292e-15 3.8698298e-15   -6037316.9   -6037316.9 9.0005393e-13            0            0   -6037316.9   -29577.594     30090240    83.698998    971.63618          370   -699.97546   -900.45336   -899.55625   -299.91677    2752.5924 
+Loop time of 2752.59 on 4 procs for 1920 steps with 1842277 atoms
+
+99.1% CPU use with 4 MPI tasks x no OpenMP threads
+
+Minimization stats:
+  Stopping criterion = energy tolerance
+  Energy initial, next-to-last, final = 
+     -6037316.42880539  -6037316.90070911  -6037316.90070911
+  Force two-norm initial, final = 1.6880059 9.0867026e-08
+  Force max component initial, final = 0.24379803 2.0549815e-10
+  Final line search alpha, max atom move = 0.0000000 0.0000000
+  Iterations, force evaluations = 1920 1925
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 2570.8     | 2600.5     | 2620.8     |  36.0 | 94.47
+Bond    | 0.007159   | 0.0075433  | 0.0080753  |   0.4 |  0.00
+Neigh   | 0          | 0          | 0          |   0.0 |  0.00
+Comm    | 32.566     | 52.88      | 82.623     | 252.7 |  1.92
+Output  | 0.44097    | 0.44188    | 0.4445     |   0.2 |  0.02
+Modify  | 2.6976     | 3.1641     | 3.671      |  25.6 |  0.11
+Other   |            | 95.6       |            |       |  3.47
+
+Nlocal:       460569.0 ave      462300 max      458850 min
+Histogram: 2 0 0 0 0 0 0 0 0 2
+Nghost:       313264.0 ave      315000 max      311550 min
+Histogram: 2 0 0 0 0 0 0 0 0 2
+Neighs:    3.05447e+07 ave 3.05668e+07 max  3.0521e+07 min
+Histogram: 1 0 0 0 1 0 1 0 0 1
+FullNghs:      0.00000 ave           0 max           0 min
+Histogram: 4 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 1.2217897e+08
+Ave neighs/atom = 66.319544
+Ave special neighs/atom = 0.0000000
+Neighbor list builds = 0
+Dangerous builds = 0
+
+#fix 1 all box/relax aniso 0.0 vmax 0.001
+
+#min_style		cg
+#minimize		1.0e-20 1.0e-20 1000000 100000
+
+write_data Cu_step0.data
+System init for write_data ...
+Neighbor list info ...
+  update every 10 steps, delay 10 steps, check yes
+  max neighbors/atom: 500000, page size: 5000000
+  master list distance cutoff = 19
+  ghost atom cutoff = 19
+  binsize = 9.5, bins = 9 103 39
+  5 neighbor lists, perpetual/occasional/extra = 5 0 0
+  (1) pair eam/fs, perpetual, skip from (4)
+      attributes: half, newton on
+      pair build: skip
+      stencil: none
+      bin: none
+  (2) pair airebo, perpetual, skip from (5)
+      attributes: full, newton on, ghost
+      pair build: skip/ghost
+      stencil: none
+      bin: none
+  (3) pair lj/cut, perpetual, skip from (4)
+      attributes: half, newton on
+      pair build: skip
+      stencil: none
+      bin: none
+  (4) neighbor class addition, perpetual
+      attributes: half, newton on
+      pair build: half/bin/newton
+      stencil: half/bin/3d/newton
+      bin: standard
+  (5) neighbor class addition, perpetual
+      attributes: full, newton on, ghost
+      pair build: full/bin/ghost
+      stencil: full/ghost/bin/3d
+      bin: standard
+
+variable teng equal "pe"
+variable lj equal "c_1"
+variable inner equal "c_innerEnergy"
+variable natoms equal "count(all)"
+variable ecoh equal "v_teng/v_natoms"
+print "${teng}, ${ecoh}, ${inner}, ${lj}"
+ERROR: Compute used in variable thermo keyword between runs is not current (../thermo.cpp:1190)
+Last command: ${teng
